@@ -3,6 +3,9 @@ import numpy as np
 from IPython.display import HTML,display
 import matplotlib.pyplot as plt
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier 
+from sklearn.grid_search import GridSearchCV
 
 pd.set_option('display.max_rows', 15)
 num_types = ['int8', 'int16', 'int32', 'int64', 'float16', 'float32', 'float64', 'float128']
@@ -22,7 +25,7 @@ class MissingImputer(BaseEstimator, TransformerMixin):
 	def __init__(self, method="mean"):
 		self.method = method
 		
-	def fit(self, X):
+	def fit(self, X, y=None):
 		if self.method == "mean":
 			self.values = X[get_num_col(X)].mean()
 		elif self.method == "max":
@@ -33,7 +36,7 @@ class MissingImputer(BaseEstimator, TransformerMixin):
 			self.values = X[get_num_col(X)].mode().iloc[0]
 		return self
 		
-	def transform(self, X):
+	def transform(self, X, y=None):
 		XX = X.copy()
 		XX.fillna(self.values, inplace=True)
 		return XX
@@ -71,7 +74,7 @@ class CategoricalConverter(BaseEstimator, TransformerMixin):
 				self.values[col] = X[col].value_counts()
 		return self
 		
-	def transform(self, X):
+	def transform(self, X, y=None):
 		XX = X.copy()
 		if self.method == "dummy":
 			for col in self.cate_cols:
@@ -198,7 +201,7 @@ def get_num_of_unique(df, top_n=None):
 		numdf = numdf[:top_n]
 	return numdf
 	
-def analyze_it(x,y,problem_type="infer"):
+def analyze_it(x, y, problem_type="infer", seed=42):
 
 	xx = x.copy()
 	yy = y.copy()
@@ -223,13 +226,8 @@ def analyze_it(x,y,problem_type="infer"):
 	
 	display(HTML("<h1 style='text-align:center'> First Glance</h1>"))
 	bool_2_int(xx)
-	msrate = get_missing_rate(xx, top_n=10)
-	if len(msrate) > 0:
-		display(HTML("<hr>"))
-		display(HTML("<h2> Missing values </h2>"))	
-		msrate.sort(inplace=True)
-		msrate.plot(kind="barh", title=("Top %d missing value rates" % len(msrate)))
-		plt.show()
+	pipelist = []
+
 	
 	if len(get_num_col(xx)) > 0:
 		display(HTML("<hr>"))
@@ -243,32 +241,57 @@ def analyze_it(x,y,problem_type="infer"):
 		ncate = get_num_of_unique(xx[get_cate_col(xx)], top_n=10)
 		ncate.sort(inplace=True)
 		ncate.plot(kind="barh", title=("Top %d number of categories" % len(ncate)))
-		plt.show()		
+		plt.show()
+		pipelist.append(('convert',CategoricalConverter()))
+	
+	
+
+	msrate = get_missing_rate(xx, top_n=10)
+	if len(msrate) > 0:
+		display(HTML("<hr>"))
+		display(HTML("<h2> Missing values </h2>"))	
+		msrate.sort(inplace=True)
+		msrate.plot(kind="barh", title=("Top %d missing value rates" % len(msrate)))
+		plt.show()
+		pipelist.append(('impute',MissingImputer()))	
 	
 	display(HTML("<hr>"))
-	
 	
 	if problem_type == "classification":
 		display(HTML("<h2> Distribution of response</h2>"))
 		yrate = yy.value_counts()/len(yy)
 		yrate.plot(kind="barh")
 		plt.show()
+		pipelist.append(('RF',RandomForestClassifier(n_estimators=50,n_jobs=-1,random_state=seed)))
 	else:
 		display(HTML("<h2> Histogram of response</h2>"))
 		yy.hist()
 		plt.show()
+		pipelist.append(('RF',RandomForestRegressor(n_estimators=50,n_jobs=-1,random_state=seed)))
 	
 	display(HTML("<hr>"))
-	display(HTML("<h2> Benchmark</h2>"))		
+	display(HTML("<h2> Benchmark using Random Forest with 50 trees</h2>"))		
 	display(HTML("<h3> This is a %s problem.</h3>" % problem_type))	
 	
 	
-
 	
+	pipe = Pipeline(pipelist)	
+	paras = {'impute__method': ["mean","median","max","mode"],
+	         'convert__method': ["dummy", "groupmean", "valuecount"]}
 	
-	
-
-
+	if problem_type == "classification":
+		cv = GridSearchCV(pipe, paras, scoring="roc_auc")
+		cv.fit(x,y)
+		display(HTML("<h3> 3-fold Cross validated ROC_AUC score: %5.3f</h3>" % cv.best_score_))	 
+		display(HTML("<h3> Best parameter: </h3>"))
+		print cv.best_params_
+		
+	else:
+		cv = GridSearchCV(pipe, paras, scoring="mean_squared_error")
+		cv.fit(x,y)
+		display(HTML("<h3> 3-fold Cross validated MSE: %20.3f</h3>" % cv.best_score_))
+		display(HTML("<h3> Best parameter: </h3>"))
+		print cv.best_params_
 
 
 
