@@ -204,7 +204,16 @@ def get_num_of_unique(df, top_n=None):
 	return numdf
 	
 def analyze_it(x, y, problem_type="infer", seed=42):
-
+	"""
+	This function will produce a report of quick analysis of a dataset.
+	
+	Parameters:
+	x: Pandas dataframe containing all the predictors.
+	y: Pandas Series containing the response.
+	problem_type: string, can be "classification" "regression" "infer". default is "infer"
+	seed: int,the seed to control random forest. default is 42.
+	
+	"""
 	start_time = time.time()
 	xx = x.copy()
 	yy = y.copy()
