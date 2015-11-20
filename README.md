@@ -9,4 +9,5 @@ $ import firstglance as fg
 ```
 
 # Demo
-Please go to [demo1](http://nbviewer.ipython.org/gist/billycyy/525a67b3d056dce423c9) and [demo2](http://nbviewer.ipython.org/gist/billycyy/172f8ea5cdc734bc0c40) to see the demo in iPython notebook.
+Please go to [demo1](http://nbviewer.ipython.org/gist/billycyy/525a67b3d056dce423c9) and [demo2](http://nbviewer.ipython.org/gist/billycyy/172f8ea5cdc734bc0c40) to see the demo in iPython notebook. (Nbviewer has nicer format.)
+If these two link don't work, plz refer to [demo1](/demo_first_glance.ipynb) and [demo2](/demo_first_glance_2.ipynb) directly.
