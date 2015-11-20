@@ -2,10 +2,88 @@ import pandas as pd
 import numpy as np
 from IPython.display import HTML,display
 import matplotlib.pyplot as plt
+from sklearn.base import BaseEstimator, TransformerMixin
 
 pd.set_option('display.max_rows', 15)
 num_types = ['int8', 'int16', 'int32', 'int64', 'float16', 'float32', 'float64', 'float128']
 
+class MissingImputer(BaseEstimator, TransformerMixin):
+	"""
+	An inheritance class of BaseEstimator, TransformerMixin in sklearn. It can be used in sklearn.pipeline.
+	It can impute the missing values in pandas dataframe.
+	
+	Parameters:
+	
+	method: string. can be "mean", "max", "median", "mode". Default is "mean".
+
+	Return:
+	A pandas dataframe. The original one will not be affected.	
+	"""
+	def __init__(self, method="mean"):
+		self.method = method
+		
+	def fit(self, X):
+		if self.method == "mean":
+			self.values = X[get_num_col(X)].mean()
+		elif self.method == "max":
+			self.values = X[get_num_col(X)].max()+1
+		elif self.method == "median":
+			self.values = X[get_num_col(X)].median()
+		elif self.method == "mode":
+			self.values = X[get_num_col(X)].mode().iloc[0]
+		return self
+		
+	def transform(self, X):
+		XX = X.copy()
+		XX.fillna(self.values, inplace=True)
+		return XX
+
+class CategoricalConverter(BaseEstimator, TransformerMixin):
+	"""
+	An inheritance class of BaseEstimator, TransformerMixin in sklearn. It can be used in sklearn.pipeline.
+	It can convert categorical columns to numeric ones.
+	
+	Parameters:
+	
+	method: string. can be "dummy", "groupmean", "valuecount". Default is "dummy".
+	
+	Return:
+	A pandas dataframe with the categorical columns dropped. The original one will not be affected.
+	"""
+	def __init__(self, method="dummy"):
+		self.method = method
+		
+	def fit(self, X, y):
+		self.cate_cols = get_cate_col(X)
+		self.values = {}
+		if self.method == "dummy":
+			for col in self.cate_cols:
+				self.values[col] = [val for val in X[col].unique() if str(val) != "nan"]
+		elif self.method == "groupmean":
+			for col in self.cate_cols:
+				tempdict = {}
+				tempvals = [val for val in X[col].unique() if str(val) != "nan"]
+				for val in tempvals:
+					tempdict[val] = y[(X[col] == val)].mean()
+				self.values[col] = tempdict
+		elif self.method == "valuecount":
+			for col in self.cate_cols:
+				self.values[col] = X[col].value_counts()
+		return self
+		
+	def transform(self, X):
+		XX = X.copy()
+		if self.method == "dummy":
+			for col in self.cate_cols:
+				for val in self.values[col]:
+					XX.loc[:,col+"_"+val] = (XX[col] == val).astype(int)
+		elif self.method in ["groupmean", "valuecount"]:
+			for col in self.cate_cols:
+				XX.loc[:,col+"_gpmean"] = XX[col].map(self.values[col])
+		
+		XX.drop(self.cate_cols, axis=1, inplace=True)
+		return XX
+		
 def get_num_col(df):
 	"""
 	This function will return a list of column names that have numerical values.
