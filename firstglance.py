@@ -6,6 +6,8 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier 
 from sklearn.grid_search import GridSearchCV
+import time
+
 
 pd.set_option('display.max_rows', 15)
 num_types = ['int8', 'int16', 'int32', 'int64', 'float16', 'float32', 'float64', 'float128']
@@ -203,8 +205,11 @@ def get_num_of_unique(df, top_n=None):
 	
 def analyze_it(x, y, problem_type="infer", seed=42):
 
+	start_time = time.time()
 	xx = x.copy()
 	yy = y.copy()
+	has_cate = False
+	has_miss = False
 	
 	if str(yy.dtype) not in num_types:
 		raise ValueError('The type of y is not numeric!')
@@ -236,6 +241,7 @@ def analyze_it(x, y, problem_type="infer", seed=42):
 	
 	
 	if len(get_cate_col(xx)) > 0:
+		has_cate = True
 		display(HTML("<hr>"))
 		display(HTML("<h2> Description of categorical columns</h2>"))
 		ncate = get_num_of_unique(xx[get_cate_col(xx)], top_n=10)
@@ -243,17 +249,20 @@ def analyze_it(x, y, problem_type="infer", seed=42):
 		ncate.plot(kind="barh", title=("Top %d number of categories" % len(ncate)))
 		plt.show()
 		pipelist.append(('convert',CategoricalConverter()))
+		pipelist.append(('impute',MissingImputer()))
 	
 	
 
 	msrate = get_missing_rate(xx, top_n=10)
 	if len(msrate) > 0:
+		has_miss = True
 		display(HTML("<hr>"))
 		display(HTML("<h2> Missing values </h2>"))	
 		msrate.sort(inplace=True)
 		msrate.plot(kind="barh", title=("Top %d missing value rates" % len(msrate)))
 		plt.show()
-		pipelist.append(('impute',MissingImputer()))	
+		if not has_cate:
+			pipelist.append(('impute',MissingImputer()))	
 	
 	display(HTML("<hr>"))
 	
@@ -275,25 +284,36 @@ def analyze_it(x, y, problem_type="infer", seed=42):
 	
 	
 	
-	pipe = Pipeline(pipelist)	
-	paras = {'impute__method': ["mean","median","max","mode"],
-	         'convert__method': ["dummy", "groupmean", "valuecount"]}
-	
+	pipe = Pipeline(pipelist)
+	paras = {}
+	if has_cate:
+		paras['convert__method'] = ["dummy", "groupmean", "valuecount"]
+		paras['impute__method'] = ["mean","median","max","mode"]
+	elif has_miss:
+		paras['impute__method'] = ["mean","median","max","mode"]
+		
 	if problem_type == "classification":
 		cv = GridSearchCV(pipe, paras, scoring="roc_auc")
 		cv.fit(x,y)
-		display(HTML("<h3> 3-fold Cross validated ROC_AUC score: %5.3f</h3>" % cv.best_score_))	 
-		display(HTML("<h3> Best parameter: </h3>"))
-		print cv.best_params_
+		display(HTML("<h3> 3-fold Cross validated ROC_AUC score: %5.3f</h3>" % cv.best_score_))
+		if has_cate:
+			display(HTML("<h3> Best parameter for converting categorical features: %s</h3>" % cv.best_params_['convert__method']))
+			display(HTML("<h3> Best parameter for missing value imputation: %s</h3>" % cv.best_params_['impute__method']))
+		elif has_miss:
+			display(HTML("<h3> Best parameter for missing value imputation: %s</h3>" % cv.best_params_['impute__method']))
 		
 	else:
 		cv = GridSearchCV(pipe, paras, scoring="mean_squared_error")
 		cv.fit(x,y)
 		display(HTML("<h3> 3-fold Cross validated MSE: %20.3f</h3>" % cv.best_score_))
-		display(HTML("<h3> Best parameter: </h3>"))
-		print cv.best_params_
+		if has_cate:
+			display(HTML("<h3> Best parameter for converting categorical features: %s</h3>" % cv.best_params_['convert__method']))
+			display(HTML("<h3> Best parameter for missing value imputation: %s</h3>" % cv.best_params_['impute__method']))
+		elif has_miss:
+			display(HTML("<h3> Best parameter for missing value imputation: %s</h3>" % cv.best_params_['impute__method']))
 
-
-
-
+	display(HTML("<hr>"))
+	display(HTML("<h3> --- %10.2f seconds --- </h3>" % (time.time() - start_time)))
+	
+	
 	return None
