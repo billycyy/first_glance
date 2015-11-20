@@ -314,7 +314,7 @@ def analyze_it(x, y, problem_type="infer", seed=42):
 	else:
 		cv = GridSearchCV(pipe, paras, scoring="mean_squared_error")
 		cv.fit(x,y)
-		display(HTML("<h3> 3-fold Cross validated MSE: %20.3f</h3>" % cv.best_score_))
+		display(HTML("<h3> 3-fold Cross validated MSE: %20.3f</h3>" % abs(cv.best_score_)))
 		if has_cate:
 			display(HTML("<h3> Best parameter for converting categorical features: %s</h3>" % cv.best_params_['convert__method']))
 			display(HTML("<h3> Best parameter for missing value imputation: %s</h3>" % cv.best_params_['impute__method']))
