@@ -150,7 +150,7 @@ def analyze_it(x,y,problem_type="infer"):
 		display(HTML("<hr>"))
 		display(HTML("<h2> Missing values </h2>"))	
 		msrate.sort(inplace=True)
-		msrate.plot(kind="barh", title=("Top "+str(len(msrate))+" missing value rates"))
+		msrate.plot(kind="barh", title=("Top %d missing value rates" % len(msrate)))
 		plt.show()
 	
 	if len(get_num_col(xx)) > 0:
@@ -164,12 +164,27 @@ def analyze_it(x,y,problem_type="infer"):
 		display(HTML("<h2> Description of categorical columns</h2>"))
 		ncate = get_num_of_unique(xx[get_cate_col(xx)], top_n=10)
 		ncate.sort(inplace=True)
-		ncate.plot(kind="barh", title=("Top "+str(len(ncate))+" number of categories"))
+		ncate.plot(kind="barh", title=("Top %d number of categories" % len(ncate)))
 		plt.show()		
-		
-		
-		
-		
+	
+	display(HTML("<hr>"))
+	
+	
+	if problem_type == "classification":
+		display(HTML("<h2> Distribution of response</h2>"))
+		yrate = yy.value_counts()/len(yy)
+		yrate.plot(kind="barh")
+		plt.show()
+	else:
+		display(HTML("<h2> Histogram of response</h2>"))
+		yy.hist()
+		plt.show()
+	
+	display(HTML("<hr>"))
+	display(HTML("<h2> Benchmark</h2>"))		
+	display(HTML("<h3> This is a %s problem.</h3>" % problem_type))	
+	
+	
 
 	
 	
@@ -180,4 +195,4 @@ def analyze_it(x,y,problem_type="infer"):
 
 
 
-	return
+	return None
