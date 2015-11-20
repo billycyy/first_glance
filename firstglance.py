@@ -87,7 +87,8 @@ def get_missing_rate(df, top_n=None):
 	
 	Parameters:
 	
-	df: Pandas dataframe	
+	df: Pandas dataframe
+	top_n: None or int. The number of highest missing value rate. Default is None, which means retaining all the records.	
 	
 	Return:
 	
@@ -99,6 +100,25 @@ def get_missing_rate(df, top_n=None):
 	if top_n is not None and top_n < len(msratedf):
 		msratedf = msratedf[:top_n]
 	return msratedf
+
+def get_num_of_unique(df, top_n=None):
+	"""
+	This function will provide number of categories for the categorical columns.
+	
+	Parameters:
+	
+	df: Pandas dataframe with all categorical columns	
+	top_n: None or int. The number of highest missing value rate. Default is None, which means retaining all the records.	
+	
+	Return:
+	
+	A pandas Series of number of categories, having column names as index, sorted in descending order.
+	"""
+	numdf = df.apply(axis=0, func=lambda x: len(x[x.notnull()].unique()))
+	numdf.sort(ascending=False, inplace=True)
+	if top_n is not None and top_n < len(numdf):
+		numdf = numdf[:top_n]
+	return numdf
 	
 def analyze_it(x,y,problem_type="infer"):
 
@@ -125,7 +145,7 @@ def analyze_it(x,y,problem_type="infer"):
 	
 	display(HTML("<h1 style='text-align:center'> First Glance</h1>"))
 	bool_2_int(xx)
-	msrate = get_missing_rate(xx,top_n=10)
+	msrate = get_missing_rate(xx, top_n=10)
 	if len(msrate) > 0:
 		display(HTML("<hr>"))
 		display(HTML("<h2> Missing values </h2>"))	
@@ -138,10 +158,14 @@ def analyze_it(x,y,problem_type="infer"):
 		display(HTML("<h2> Description of numeric columns</h2>"))		
 		display_all_cols(xx[get_num_col(xx)].describe())
 	
+	
 	if len(get_cate_col(xx)) > 0:
 		display(HTML("<hr>"))
 		display(HTML("<h2> Description of categorical columns</h2>"))
-		
+		ncate = get_num_of_unique(xx[get_cate_col(xx)], top_n=10)
+		ncate.sort(inplace=True)
+		ncate.plot(kind="barh", title=("Top "+str(len(ncate))+" number of categories"))
+		plt.show()		
 		
 		
 		
