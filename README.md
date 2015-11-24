@@ -1,5 +1,5 @@
 # First Glance
-A python module used to produce an initial analysis to datasets.
+A python module used to produce a report and initial benchmark for datasets..
 
 
 #How to use
