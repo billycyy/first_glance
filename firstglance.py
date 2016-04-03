@@ -6,9 +6,10 @@ import matplotlib.pyplot as plt
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier 
-from sklearn.grid_search import GridSearchCV
+from sklearn.grid_search import RandomizedSearchCV
 import time
-
+from sklearn.feature_extraction import DictVectorizer
+from operator import itemgetter
 
 pd.set_option('display.max_rows', 15)
 num_types = ['int8', 'int16', 'int32', 'int64', 'float16', 'float32', 'float64', 'float128']
@@ -52,19 +53,23 @@ class CategoricalConverter(BaseEstimator, TransformerMixin):
 	Parameters:
 	
 	method: string. can be "dummy", "groupmean", "valuecount". Default is "dummy".
+	cate_col: None or a list of string of column names.
 	
 	Return:
 	A pandas dataframe with the categorical columns dropped. The original one will not be affected.
 	"""
-	def __init__(self, method="dummy"):
+	def __init__(self, method="dummy", cate_cols=None):
 		self.method = method
+		self.cate_cols = cate_cols
+		return
 		
 	def fit(self, X, y):
-		self.cate_cols = get_cate_col(X)
+		if self.cate_cols is None:
+			self.cate_cols = get_cate_col(X)
 		self.values = {}
 		if self.method == "dummy":
-			for col in self.cate_cols:
-				self.values[col] = [val for val in X[col].unique() if str(val) != "nan"]
+			self.dvec = DictVectorizer(sparse=False)
+			self.dvec.fit((X[self.cate_cols]).to_dict('record'))
 		elif self.method == "groupmean":
 			for col in self.cate_cols:
 				tempdict = {}
@@ -80,9 +85,8 @@ class CategoricalConverter(BaseEstimator, TransformerMixin):
 	def transform(self, X, y=None):
 		XX = X.copy()
 		if self.method == "dummy":
-			for col in self.cate_cols:
-				for val in self.values[col]:
-					XX.loc[:,col+"_"+val] = (XX[col] == val).astype(int)
+			temp_dummy = pd.DataFrame( data = self.dvec.transform((XX[self.cate_cols]).to_dict('record')), columns = self.dvec.get_feature_names(), index=XX.index)
+			XX = pd.concat([temp_dummy,XX],axis=1)
 		elif self.method in ["groupmean", "valuecount"]:
 			for col in self.cate_cols:
 				XX.loc[:,col+"_gpmean"] = XX[col].map(self.values[col])
@@ -180,7 +184,7 @@ def get_missing_rate(df, top_n=None):
 	"""
 	msratedf = df.apply(axis=0, func=lambda x: x.isnull().mean())
 	msratedf = msratedf[msratedf>0]
-	msratedf.sort(ascending=False,inplace=True)
+	msratedf.sort_values(ascending=False,inplace=True)
 	if top_n is not None and top_n < len(msratedf):
 		msratedf = msratedf[:top_n]
 	return msratedf
@@ -199,10 +203,33 @@ def get_num_of_unique(df, top_n=None):
 	A pandas Series of number of categories, having column names as index, sorted in descending order.
 	"""
 	numdf = df.apply(axis=0, func=lambda x: len(x[x.notnull()].unique()))
-	numdf.sort(ascending=False, inplace=True)
+	numdf.sort_values(ascending=False, inplace=True)
 	if top_n is not None and top_n < len(numdf):
 		numdf = numdf[:top_n]
 	return numdf
+	
+def report(grid_scores, n_top=10):
+	"""
+	This function will print scores from grid search results.
+	
+	Parameters:
+	
+	grid_scores: grid score from grid search of scikit-learn
+	n_top: int, number of top models whose score will be shown. default is 10
+	
+	"""
+	top_scores = sorted(grid_scores, key=itemgetter(1), reverse=True)[:n_top]
+	display(HTML("<hr>"))
+	for i, score in enumerate(top_scores):
+		display(HTML("<h3>"+("Model with rank: {0}".format(i + 1))+"</h3>"))
+		display(HTML("<h3>"+("Mean validation score: {0:.3f} (std: {1:.3f})".format(
+			  score.mean_validation_score,
+			  np.std(score.cv_validation_scores)))+"</h3>"))
+
+		display(HTML("<h3>"+("Parameters: {0}".format(score.parameters))+"</h3>"))
+		display(HTML("<h3>"+" </h3>"))
+	display(HTML("<hr>"))
+	return 
 	
 def analyze_it(x, y, problem_type="infer", seed=42):
 	"""
@@ -255,7 +282,7 @@ def analyze_it(x, y, problem_type="infer", seed=42):
 		display(HTML("<hr>"))
 		display(HTML("<h2> Description of categorical columns</h2>"))
 		ncate = get_num_of_unique(xx[get_cate_col(xx)], top_n=10)
-		ncate.sort(inplace=True)
+		ncate.sort_values(inplace=True)
 		ncate.plot(kind="barh", title=("Top %d number of categories" % len(ncate)))
 		plt.show()
 		pipelist.append(('convert',CategoricalConverter()))
@@ -268,7 +295,7 @@ def analyze_it(x, y, problem_type="infer", seed=42):
 		has_miss = True
 		display(HTML("<hr>"))
 		display(HTML("<h2> Missing values </h2>"))	
-		msrate.sort(inplace=True)
+		msrate.sort_values(inplace=True)
 		msrate.plot(kind="barh", title=("Top %d missing value rates" % len(msrate)))
 		plt.show()
 		if not has_cate:
@@ -301,9 +328,14 @@ def analyze_it(x, y, problem_type="infer", seed=42):
 		paras['impute__method'] = ["mean","median","max","mode"]
 	elif has_miss:
 		paras['impute__method'] = ["mean","median","max","mode"]
-		
+	
+	paras['RF__max_features'] = [0.1,0.5,0.9,'log2','sqrt']
+	paras['RF__max_depth'] = [None,5,10,20]
 	if problem_type == "classification":
-		cv = GridSearchCV(pipe, paras, scoring="roc_auc")
+		paras['RF__criterion'] = ['gini','entropy']
+	
+	if problem_type == "classification":
+		cv = RandomizedSearchCV(pipe, paras, n_iter=20, scoring="roc_auc", random_state=seed)
 		cv.fit(x,y)
 		display(HTML("<h3> 3-fold Cross validated ROC_AUC score: %5.3f</h3>" % cv.best_score_))
 		if has_cate:
@@ -313,7 +345,7 @@ def analyze_it(x, y, problem_type="infer", seed=42):
 			display(HTML("<h3> Best parameter for missing value imputation: %s</h3>" % cv.best_params_['impute__method']))
 		
 	else:
-		cv = GridSearchCV(pipe, paras, scoring="mean_squared_error")
+		cv = RandomizedSearchCV(pipe, paras, n_iter=20, scoring="mean_squared_error", random_state=seed)
 		cv.fit(x,y)
 		display(HTML("<h3> 3-fold Cross validated MSE: %20.3f</h3>" % abs(cv.best_score_)))
 		if has_cate:
@@ -321,8 +353,9 @@ def analyze_it(x, y, problem_type="infer", seed=42):
 			display(HTML("<h3> Best parameter for missing value imputation: %s</h3>" % cv.best_params_['impute__method']))
 		elif has_miss:
 			display(HTML("<h3> Best parameter for missing value imputation: %s</h3>" % cv.best_params_['impute__method']))
-
-	display(HTML("<hr>"))
+	
+	report(cv.grid_scores_, n_top=3)
+	
 	display(HTML("<h3> --- %10.2f seconds --- </h3>" % (time.time() - start_time)))
 	
 	
